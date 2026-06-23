@@ -1,74 +1,107 @@
 version: 2
 
 models:
-  - name: fct_orders
+  - name: dim_orders_scd2
     description: >
-      Fact table with one row per order. Partitioned by order_date (monthly)
-      and clustered by status and category for query efficiency.
-      Includes derived flags, size tiers, and fulfillment metrics.
+      SCD Type 2 order dimension sourced from snap_orders.
+      One row per version of each order. Use is_current = true for the latest state.
+      Use valid_from / valid_to for point-in-time lookups.
     columns:
-      - name: order_id
-        description: "Unique order identifier"
+      - name: order_version_key
+        description: "Surrogate key (dbt_scd_id) — unique per version row"
         tests:
           - unique
           - not_null
-      - name: customer_id
+      - name: order_id
+        description: "Natural key — multiple rows per order if changes occurred"
         tests:
           - not_null
+      - name: is_current
+        tests:
+          - not_null
+      - name: valid_from
+        tests:
+          - not_null
+      - name: valid_to
+        description: "Timestamp indicating the end of this version's validity"
+      - name: version_number
+        description: "Monotonically increasing version counter per order_id"
       - name: status
         tests:
           - accepted_values:
-              arguments: # Indented 4 spaces under test name
+              arguments:
                 values: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']
-      - name: total_amount
-        tests:
-          - not_null
-      - name: order_size_tier
-        tests:
-          - accepted_values:
-              arguments: # Indented 4 spaces under test name
-                values: ['small', 'medium', 'large', 'enterprise']
-      - name: payment_channel
-        tests:
-          - accepted_values:
-              arguments: # Indented 4 spaces under test name
-                values: ['consumer', 'b2b', 'alternative', 'other']
 
-  - name: dim_customers
+  - name: dim_customers_scd2
     description: >
-      Customer dimension with one row per customer.
-      Contains lifetime order stats, revenue tiers, and behavioural segments.
+      SCD Type 2 customer dimension sourced from snap_customers.
+      Tracks changes to customer_name, email, segment, ltv_tier, and order metrics.
+      Use is_current = true for the current customer profile.
     columns:
-      - name: customer_id
-        description: "Unique customer identifier"
+      - name: customer_version_key
+        description: "Surrogate key (dbt_scd_id) — unique per version row"
         tests:
           - unique
           - not_null
-      - name: customer_email
+      - name: customer_id
         tests:
-          - unique
+          - not_null
+      - name: is_current
+        tests:
           - not_null
       - name: customer_segment
         tests:
           - accepted_values:
-              arguments: # Indented 4 spaces under test name
+              arguments:
                 values: ['one_time', 'repeat', 'loyal']
       - name: ltv_tier
         tests:
           - accepted_values:
-              arguments: # Indented 4 spaces under test name
+              arguments:
                 values: ['low', 'mid', 'high']
 
-  - name: agg_orders_by_month
+  - name: fct_orders
     description: >
-      Monthly aggregated order metrics by category and country.
-      Ideal for time-series dashboards and executive reporting.
+      Core fact table at current-state grain (one row per order, current version only).
+      Joins dim_orders_scd2 (is_current=true) with dim_customers_scd2 (is_current=true).
+      For historical analysis use dim_orders_scd2 or fct_orders_point_in_time.
     columns:
-      - name: order_month
-        description: "First day of the order month (DATE)"
+      - name: order_version_key
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: total_amount
         tests:
           - not_null
-      - name: gross_revenue
-        description: "Sum of total_amount before discount adjustment"
-      - name: cancellation_rate_pct
-        description: "Percentage of orders cancelled in the period"
+
+  - name: fct_orders_point_in_time
+    description: >
+      Bi-temporal fact model: all historical order versions joined to the customer
+      profile that was active at the time of the order_date.
+      Use this for audits, backfills, or replaying what the data looked like historically.
+    columns:
+      - name: order_version_key
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_customers
+    description: >
+      Current-state customer dimension (non-SCD2, used as input to snap_customers).
+      For historical customer attributes, use dim_customers_scd2.
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+
+  - name: agg_orders_by_month
+    description: "Monthly aggregated order metrics by category and country."
+    columns:
+      - name: order_month
+        tests:
+          - not_null

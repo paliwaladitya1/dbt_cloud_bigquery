@@ -47,6 +47,13 @@ renamed as (
         -- _loaded_at,
         -- _row_number
 
+        -- SCD2 watermark: timestamp when row was last updated in source system.
+        -- If your source has a real updated_at column, use that instead.
+        -- We default to CURRENT_TIMESTAMP() as a safe fallback for initial load.
+        coalesce(
+            cast(null as timestamp),   -- replace with: cast(updated_at as timestamp)
+            current_timestamp()
+        )                                                   as _updated_at
     from source
 
 )
