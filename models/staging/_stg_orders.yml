@@ -1,0 +1,54 @@
+version: 2
+
+sources:
+  - name: sales
+    database:  my-first-project-497810
+    schema: sales
+    tables:
+      - name: orders
+        description: "Raw orders table loaded into BigQuery"
+        columns:
+          - name: order_id
+            description: "Unique order identifier"
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            tests:
+              - not_null
+          - name: status
+            tests:
+              - accepted_values:
+                  arguments: # Indented 4 spaces under test name
+                    values: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+
+models:
+  - name: stg_orders
+    description: >
+      Staged orders from the raw sales.orders table.
+      Applies type casting, lowercasing of emails, and trimming.
+      No business logic — use intermediate or mart models for that.
+    columns:
+      - name: order_id
+        description: "Unique order identifier"
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: customer_email
+        description: "Lowercased and trimmed customer email"
+      - name: status
+        description: "Order status: PENDING | PROCESSING | SHIPPED | DELIVERED | CANCELLED"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: # Indented 4 spaces under test name
+                values: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+      - name: discount_rate
+        description: "Discount as a decimal fraction, e.g. 0.10 = 10%"
+      - name: total_amount
+        description: "Final charged amount after discount"
+        tests:
+          - not_null

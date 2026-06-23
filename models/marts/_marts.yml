@@ -1,0 +1,74 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: >
+      Fact table with one row per order. Partitioned by order_date (monthly)
+      and clustered by status and category for query efficiency.
+      Includes derived flags, size tiers, and fulfillment metrics.
+    columns:
+      - name: order_id
+        description: "Unique order identifier"
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - accepted_values:
+              arguments: # Indented 4 spaces under test name
+                values: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+      - name: total_amount
+        tests:
+          - not_null
+      - name: order_size_tier
+        tests:
+          - accepted_values:
+              arguments: # Indented 4 spaces under test name
+                values: ['small', 'medium', 'large', 'enterprise']
+      - name: payment_channel
+        tests:
+          - accepted_values:
+              arguments: # Indented 4 spaces under test name
+                values: ['consumer', 'b2b', 'alternative', 'other']
+
+  - name: dim_customers
+    description: >
+      Customer dimension with one row per customer.
+      Contains lifetime order stats, revenue tiers, and behavioural segments.
+    columns:
+      - name: customer_id
+        description: "Unique customer identifier"
+        tests:
+          - unique
+          - not_null
+      - name: customer_email
+        tests:
+          - unique
+          - not_null
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              arguments: # Indented 4 spaces under test name
+                values: ['one_time', 'repeat', 'loyal']
+      - name: ltv_tier
+        tests:
+          - accepted_values:
+              arguments: # Indented 4 spaces under test name
+                values: ['low', 'mid', 'high']
+
+  - name: agg_orders_by_month
+    description: >
+      Monthly aggregated order metrics by category and country.
+      Ideal for time-series dashboards and executive reporting.
+    columns:
+      - name: order_month
+        description: "First day of the order month (DATE)"
+        tests:
+          - not_null
+      - name: gross_revenue
+        description: "Sum of total_amount before discount adjustment"
+      - name: cancellation_rate_pct
+        description: "Percentage of orders cancelled in the period"
